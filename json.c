@@ -12,6 +12,12 @@ static const char *parse_string(lua_State *L, const char *str);
 static const char *parse_object(lua_State *L, const char *str);
 static const char *parse_array(lua_State *L, const char *str);
 static const char *parse_number(lua_State *L, const char *str);
+static const char *skip_space(const char *str);
+static int is_array(lua_State *L, int idx);
+static int ldecode(lua_State *L);
+static int lencode(lua_State *L);
+static int encode(lua_State *L, luaL_Buffer *buffer);
+
 
 static const char *
 skip_space(const char *str)
@@ -402,7 +408,8 @@ luaopen_json(lua_State *L)
 	return 1;
 }
 
-int main()
+int 
+main()
 {
 	lua_State *L = luaL_newstate();
 	luaL_openlibs(L);
