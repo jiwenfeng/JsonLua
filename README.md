@@ -1,6 +1,5 @@
 # JsonLua
 
-Encode a Lua table to Json string
-Decode a Json string to Lua table
+This is a JSON library for Lua.You can encode a Lua table to json string or decode a json string to
+Lua table.Read the main.lua to learn how to use it.
 
-The example is in the main.lua
