@@ -18,7 +18,7 @@ local tb1 = {"s", "a", "b"} -- [a, b, c]
 
 local tb2 = {s = 1, "s", "a", [3] = "t", [5] = "c", [4] = "fasd", TT = {a = 1, b = 2, c = 3}} -- {"s":a}
 
-local tb3 = {{1, 2, 3}, {a = 1, b = 2}}
+local tb3 = {{1, 2, 3}, {a = 1, b = 2}, {[3.3]=true, [4]=1.1}}
 
 print(json.Encode(tb))
 print(json.Encode(tb1))

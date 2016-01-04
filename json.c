@@ -17,7 +17,8 @@ static int is_array(lua_State *L, int idx);
 static int ldecode(lua_State *L);
 static int lencode(lua_State *L);
 static int encode(lua_State *L, luaL_Buffer *buffer);
-
+static int encode_object(lua_State *L, luaL_Buffer *buffer);
+static int encode_array(lua_State *L, luaL_Buffer *buffer);
 
 static const char *
 skip_space(const char *str)
@@ -263,15 +264,128 @@ is_array(lua_State *L, int idx)
 }
 
 static int
+encode_object(lua_State *L, luaL_Buffer *buffer)
+{
+	lua_pushstring(L, "{");
+	luaL_addvalue(buffer);
+	int flag = 0;
+	lua_pushnil(L);
+	while(lua_next(L, -2))
+	{
+		if(flag)
+		{
+			lua_pushstring(L, ",");
+			luaL_addvalue(buffer);
+		}
+		flag = 1;
+		switch(lua_type(L, -2))
+		{
+			case LUA_TSTRING:
+				lua_pushfstring(L, "\"%s\":", lua_tostring(L, -2));
+				luaL_addvalue(buffer);
+				break;
+			case LUA_TNUMBER:
+			{
+				char buf[1024] = {0};
+				snprintf(buf, 1024, "\"%g\":", lua_tonumber(L, -2));
+				luaL_addstring(buffer, buf);
+				break;
+			}
+			default:
+				luaL_error(L, "Unsupport key type:%s", lua_typename(L, lua_type(L, -2)));
+				return -1;
+		}
+		switch(lua_type(L, -1))
+		{
+			case LUA_TSTRING:
+				lua_pushfstring(L, "\"%s\"", lua_tostring(L, -1));
+				luaL_addvalue(buffer);
+				break;
+			case LUA_TBOOLEAN:
+			{
+				lua_pushfstring(L, "%d", lua_toboolean(L, -1));
+				luaL_addvalue(buffer);
+				break;
+			}
+			case LUA_TNUMBER:
+			{
+				char buf[1024] = {0};
+				snprintf(buf, 1024, "%g", lua_tonumber(L, -1));
+				luaL_addstring(buffer, buf);
+				break;
+			}
+			case LUA_TTABLE:
+				encode(L, buffer);
+				break;
+			default:
+				luaL_error(L, "Unsupport value type:%s", lua_typename(L, lua_type(L, -1)));
+				return -1;
+		}
+		lua_pop(L, 1);
+	}
+	lua_pushstring(L, "}");
+	luaL_addvalue(buffer);
+	return 0;
+}
+
+static int
+encode_array(lua_State *L, luaL_Buffer *buffer)
+{
+	lua_pushstring(L, "[");
+	luaL_addvalue(buffer);
+	int flag = 0;
+	lua_pushnil(L);
+	while(lua_next(L, -2))
+	{
+		if(flag)
+		{
+			lua_pushstring(L, ",");
+			luaL_addvalue(buffer);
+		}
+		flag = 1;
+		char buf[1024] = {0};
+		switch(lua_type(L, -1))
+		{
+			case LUA_TSTRING:
+				lua_pushfstring(L, "\"%s\"", lua_tostring(L, -1));
+				luaL_addvalue(buffer);
+				break;
+			case LUA_TBOOLEAN:
+				lua_pushfstring(L, "%d", lua_toboolean(L, -1));
+				luaL_addvalue(buffer);
+				break;
+			case LUA_TNUMBER:
+				snprintf(buf, 1024, "%g", lua_tonumber(L, -1));
+				luaL_addstring(buffer, buf);
+				break;
+			case LUA_TTABLE:
+				encode(L, buffer);
+				break;
+			default:
+				luaL_error(L, "Unsupport type:%s", lua_typename(L, lua_type(L, -1)));
+				return -1;
+		}
+		lua_pop(L, 1);
+	}
+	lua_pushstring(L, "]");
+	luaL_addvalue(buffer);
+	return 0;
+}
+
+static int
 encode(lua_State *L, luaL_Buffer *buffer)
 {
 	int type = lua_type(L, -1);
+	char buf[1024] = {0};
 	switch(type)
 	{
-		case LUA_TNUMBER:
 		case LUA_TBOOLEAN:
-			lua_pushfstring(L, "\"%d\"", lua_tonumber(L, -1));
+			lua_pushfstring(L, "\"%d\"", lua_toboolean(L, -1));
 			luaL_addvalue(buffer);
+			break;
+		case LUA_TNUMBER:
+			snprintf(buf, 1024, "\"%g\"", lua_tonumber(L, -1));
+			luaL_addstring(buffer, buf);
 			break;
 		case LUA_TSTRING:
 			lua_pushfstring(L, "\"%s\"", lua_tostring(L, -1));
@@ -279,107 +393,13 @@ encode(lua_State *L, luaL_Buffer *buffer)
 			break;
 		case LUA_TTABLE:
 		{
-			int table = is_array(L, -1);
-			if(table)
-			{
-				lua_pushstring(L, "[");
-			}
-			else
-			{
-				lua_pushstring(L, "{");
-			}
-			luaL_addvalue(buffer);
-			int flag = 0;
-			lua_pushnil(L);
-			while(lua_next(L, -2))
-			{
-				if(flag)
-				{
-					lua_pushstring(L, ",");
-					luaL_addvalue(buffer);
-				}
-				flag = 1;
-				if(lua_type(L, -2) == LUA_TSTRING && lua_type(L, -1) == LUA_TSTRING)
-				{
-					if(table)
-					{
-						lua_pushfstring(L, "\"%s\"", lua_tostring(L, -1));
-					}
-					else
-					{
-						lua_pushfstring(L, "\"%s\":\"%s\"", lua_tostring(L, -2), lua_tostring(L, -1));
-					}
-					luaL_addvalue(buffer);
-				}
-				else if(lua_type(L, -2) == LUA_TSTRING && (lua_type(L, -1) == LUA_TNUMBER || lua_type(L, -1) == LUA_TBOOLEAN))
-				{
-					if(table)
-					{
-						lua_pushfstring(L, "%d", (int)lua_tonumber(L, -1));
-					}
-					else
-					{
-						lua_pushfstring(L, "\"%s\":%d", lua_tostring(L, -2), (int)lua_tonumber(L, -1));
-					}
-					luaL_addvalue(buffer);
-				}
-				else if(lua_type(L, -2) == LUA_TNUMBER && lua_type(L, -1) == LUA_TSTRING)
-				{
-					if(table)
-					{
-						lua_pushfstring(L, "\"%s\"", lua_tostring(L, -1));
-					}
-					else
-					{
-						lua_pushfstring(L, "\"%d\":\"%s\"", (int)lua_tonumber(L, -2), lua_tostring(L, -1));
-					}
-					luaL_addvalue(buffer);
-				}
-				else if(lua_type(L, -1) == LUA_TNUMBER && (lua_type(L, -1) == LUA_TNUMBER || lua_type(L, -1) == LUA_TBOOLEAN))
-				{
-					if(table)
-					{
-						lua_pushfstring(L, "%d", (int)lua_tonumber(L, -1));
-					}
-					else
-					{	
-						lua_pushfstring(L, "\"%d\":%d", (int)lua_tonumber(L, -2), (int)lua_tonumber(L, -1));
-					}
-					luaL_addvalue(buffer);
-				}
-				else if(lua_type(L, -2) == LUA_TSTRING && lua_type(L, -1) == LUA_TTABLE)
-				{
-					if(!table)
-					{
-						lua_pushfstring(L, "\"%s\":", lua_tostring(L, -2));
-						luaL_addvalue(buffer);
-					}
-					encode(L, buffer);
-				}
-				else if(lua_type(L, -2) == LUA_TNUMBER && lua_type(L, -1) == LUA_TTABLE)
-				{
-					if(!table)
-					{
-						lua_pushfstring(L, "\"%d\":", (int)lua_tonumber(L, -2));
-						luaL_addvalue(buffer);
-					}
-					encode(L, buffer);
-				}
-				lua_pop(L, 1);
-			}
-			if(table)
-			{
-				lua_pushstring(L, "]");
-			}
-			else
-			{
-				lua_pushstring(L, "}");
-			}
-			luaL_addvalue(buffer);
+			int ret = is_array(L, -1) ? encode_array(L, buffer) : encode_object(L, buffer);
+			(void)ret; // avoid warning
 			break;
 		}
 		default:
 			luaL_error(L, "Not support field type:`%s'", lua_typename(L, type));
+			return -1;
 	}
 	return 0;
 }
